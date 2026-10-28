@@ -1,5 +1,7 @@
 {
     "python.defaultInterpreterPath": "E:\\Anaconda\\envs\\livetalking\\python.exe",
     "python.condaPath": "E:\\Anaconda\\Scripts\\conda.exe",
-    "python.terminal.activateEnvironment": true
+    "python.terminal.activateEnvironment": true,
+    "python-envs.defaultEnvManager": "ms-python.python:conda",
+    "python-envs.defaultPackageManager": "ms-python.python:conda"
 }
