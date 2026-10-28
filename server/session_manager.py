@@ -92,6 +92,9 @@ class SessionManager:
             logger.info(f"Removing session {sessionid}")
             avatar_session = self.sessions.pop(sessionid, None)
             try:
+                controller = getattr(avatar_session, 'live_controller', None)
+                if controller:
+                    controller.cancel()
                 if avatar_session is not None and getattr(avatar_session, 'quit_event', None) is not None:
                     avatar_session.flush_talk()
                     avatar_session.quit_event.set()

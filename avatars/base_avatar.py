@@ -129,6 +129,10 @@ class BaseAvatar:
             self.tts.put_msg_txt(msg, datainfo)
     
     def put_audio_frame(self, audio_chunk:NDArray[np.float32], datainfo:dict={}): # 16khz 20ms pcm
+        if 'live_run_id' in datainfo and datainfo['live_run_id'] != getattr(self, 'live_run_id', None):
+            return  # A stopped/switched live run must never enqueue late TTS audio.
+        if getattr(self, 'live_run_id', None) and 'live_run_id' not in datainfo:
+            return  # Discard audio left over from manual chat before live mode.
         if hasattr(self, 'asr'):
             self.asr.put_audio_frame(audio_chunk, datainfo)
 
@@ -183,6 +187,7 @@ class BaseAvatar:
         return stream
 
     def flush_talk(self):
+        self.chat_epoch = getattr(self, 'chat_epoch', 0) + 1
         if hasattr(self, 'tts') and hasattr(self.tts, 'flush_talk'):
             self.tts.flush_talk()
         if hasattr(self, 'asr') and hasattr(self.asr, 'flush_talk'):
@@ -398,6 +403,13 @@ class BaseAvatar:
                 res_frame,audio_frames,idx = self.res_frame_queue.get(block=True, timeout=1)
             except queue.Empty:
                 continue
+
+            for audio_frame in audio_frames:
+                run_id = audio_frame.userdata.get('live_run_id')
+                if run_id and run_id != getattr(self, 'live_run_id', None):
+                    audio_frame.data = np.zeros_like(audio_frame.data)
+                    audio_frame.type = 1
+                    audio_frame.userdata = {}
             
             # 检测状态变化
             current_speaking = not (audio_frames[0].type!=0 and audio_frames[1].type!=0)

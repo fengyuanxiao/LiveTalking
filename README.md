@@ -135,6 +135,7 @@ python app.py --transport webrtc --model wav2lip --avatar_id wav2lip256_avatar1
 | 首页 | `/index.html` | WebRTC 连接 + 文本/音频驱动 + 录制控制 |
 | Avatar 生成 | `/avatar.html` | 上传视频自动生成数字人形象 |
 | 管理后台 | `/admin.html` | 实时监控会话状态与全局配置 |
+| 直播控制台 | `/live.html` | 产品资料库、主动讲解、弹幕互动；[使用与平台接入说明](docs/live.md) |
 
 <img src="./assets/index.jpg" align="middle"/>
 

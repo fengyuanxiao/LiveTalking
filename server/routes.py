@@ -50,6 +50,10 @@ async def human(request):
         if avatar_session is None:
             return json_error("session not found")
 
+        live = getattr(avatar_session, 'live_controller', None)
+        if live and live.running:
+            return json_error("自动讲解正在运行，请通过直播控制台发送弹幕，或先停止自动讲解")
+
         if params.get('interrupt'):
             avatar_session.flush_talk()
 
@@ -80,6 +84,9 @@ async def interrupt_talk(request):
         avatar_session = get_session(request, sessionid)
         if avatar_session is None:
             return json_error("session not found")
+        live = request.app.get("live_manager")
+        if live:
+            await live.stop(sessionid)
         avatar_session.flush_talk()
         return json_ok()
     except Exception as e:
@@ -100,6 +107,9 @@ async def humanaudio(request):
         avatar_session = get_session(request, sessionid)
         if avatar_session is None:
             return json_error("session not found")
+        live = getattr(avatar_session, 'live_controller', None)
+        if live and live.running:
+            return json_error("请先停止自动讲解再上传音频")
         avatar_session.put_audio_file(filebytes, datainfo)
         return json_ok()
     except Exception as e:
@@ -243,6 +253,8 @@ async def index(request):
 
 def setup_routes(app):
     """注册所有路由到 aiohttp app"""
+    from server.live_routes import setup_live_routes
+    setup_live_routes(app, session_manager)
     app.router.add_get("/", index)
     app.router.add_post("/human", human)
     app.router.add_post("/humanaudio", humanaudio)

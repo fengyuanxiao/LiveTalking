@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>直播控制台 · LiveTalking</title>
+  <link rel="stylesheet" href="/live.css">
+</head>
+<body>
+  <header><a href="/index.html">LiveTalking</a><span>直播控制台</span><span class="pill">数字人直播</span></header>
+  <main>
+    <div class="heading"><div><p class="eyebrow">LIVE STUDIO</p><h1>让讲解与互动自然衔接</h1><p>添加产品资料，开始分段讲解；观众提问后，回答并继续介绍。</p></div><div id="phase" class="phase" role="status">未开始</div></div>
+    <div id="notice" role="status">首次使用：连接数字人 → 保存产品资料 → 开始讲解。</div>
+    <div class="layout">
+      <section class="card preview">
+        <div class="section-title"><h2>数字人画面</h2><span id="connection">未连接</span></div>
+        <video id="video" autoplay playsinline muted></video>
+        <audio id="audio" autoplay controls></audio>
+        <div class="row"><button id="connect">连接数字人</button><button id="disconnect" class="secondary">断开预览</button><label class="check"><input id="stun" type="checkbox">使用 STUN</label></div>
+        <label>控制的会话</label><div class="row"><select id="sessions"><option value="">请先连接或选择已有会话</option></select><button id="refreshSessions" class="secondary">刷新</button></div>
+        <p class="hint">可选择已有的 WebRTC、RTMP 或虚拟摄像头会话。预览声音可用下方音量控件开启。</p>
+        <div class="divider"></div>
+        <h2>讲解设置</h2>
+        <div class="two"><div><label for="platform">直播平台</label><select id="platform"></select></div><div><label for="room">直播间 ID</label><input id="room" placeholder="接入真实弹幕时填写"></div></div>
+        <p id="bridgeState" class="hint">真实弹幕待接入；可先用右侧模拟弹幕测试。</p>
+        <div class="two"><div><label for="mode">讲解模式</label><select id="mode"><option value="llm">AI 讲解与问答</option><option value="script">固定稿循环</option></select></div><div><label for="style">表达风格</label><select id="style"><option>自然亲切</option><option>专业清晰</option><option>轻松活泼</option></select></div></div>
+        <p class="hint">AI 模式根据产品资料生成短段并回答问题。固定稿模式无需大模型密钥，问题统一提示待确认。</p>
+        <div class="row"><button id="start">开始 / 应用新设置</button><button id="stop" class="danger">停止讲解</button></div>
+        <p class="hint">应用新设置会停止旧讲解并从当前产品第一段开始。普通弹幕在短段结束后回复。</p>
+      </section>
+      <div class="right">
+        <section class="card">
+          <div class="section-title"><h2>产品资料库</h2><button id="newProduct" class="secondary">＋ 新产品</button></div>
+          <label for="products">已保存的产品</label><select id="products"><option value="">新增产品</option></select>
+          <div class="two"><div><label for="name">产品名称</label><input id="name" maxlength="120" placeholder="填写本次介绍的产品"></div><div><label for="category">类别（可选）</label><input id="category" maxlength="120" placeholder="日用品 / 服饰 / 食品……"></div></div>
+          <label for="facts">产品资料</label><textarea id="facts" rows="6" maxlength="12000" placeholder="填写准确的规格、用途、材质、价格、优惠条件、售后政策和常见问题。未提供的信息，AI 会提示需要确认。"></textarea>
+          <label for="scripts">分段讲解稿（可选，每行一段，建议每段 40～80 字）</label><textarea id="scripts" rows="4" placeholder="AI 模式可参考；固定稿模式按行循环播报。每段最多 240 字。"></textarea>
+          <div class="row"><button id="saveProduct">保存产品</button><span id="productState" class="hint">资料保存在本机</span></div>
+        </section>
+        <section class="card">
+          <div class="section-title"><h2>弹幕互动</h2><span id="pending" class="pill">待回答 0</span></div>
+          <div class="row"><input id="username" maxlength="80" value="测试观众" aria-label="观众昵称" class="username"><input id="comment" maxlength="500" placeholder="模拟观众提问，例如：有哪些规格？" aria-label="弹幕内容"><button id="sendComment">发送模拟弹幕</button></div>
+          <p class="hint">重复弹幕会合并；连续回答最多两条后恢复讲解，过期弹幕自动忽略。</p>
+          <div class="section-title"><h3>当前播报</h3><span id="source" class="hint">尚未接收弹幕</span></div>
+          <p id="current" class="current">等待开始……</p>
+          <p id="progress" class="hint"></p><div id="history" class="history" aria-live="polite"></div>
+        </section>
+      </div>
+    </div>
+  </main>
+  <script src="/live.js"></script>
+</body>
+</html>

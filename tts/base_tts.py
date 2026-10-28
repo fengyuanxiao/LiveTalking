@@ -3,6 +3,7 @@ import queue
 from queue import Queue
 from io import BytesIO
 from enum import Enum
+import json
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -28,7 +29,8 @@ class BaseTTS:
         self.state = State.RUNNING
 
     def flush_talk(self):
-        self.msgqueue.queue.clear()
+        with self.msgqueue.mutex:
+            self.msgqueue.queue.clear()
         self.state = State.PAUSE
 
     def put_msg_txt(self, msg: str, datainfo: dict = {}): 
@@ -46,7 +48,12 @@ class BaseTTS:
                 self.state = State.RUNNING
             except queue.Empty:
                 continue
-            self.txt_to_audio(msg)
+            try:
+                self.txt_to_audio(msg)
+            except Exception:
+                logger.exception('TTS synthesis failed')
+                if msg[1].get('live_turn_id'):
+                    self.parent.send_msg(json.dumps({**msg[1], 'status': 'tts_error'}))
         self.stop_tts()
         logger.info('ttsreal thread stop')
     

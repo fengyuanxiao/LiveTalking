@@ -1,77 +1,71 @@
-import time
 import asyncio
+from io import BytesIO
+import time
+
+import aiohttp
+import edge_tts
 import numpy as np
 import resampy
 import soundfile as sf
-import edge_tts
-from io import BytesIO
 
 from utils.logger import logger
 from .base_tts import BaseTTS, State
 from registry import register
 
+
 @register("tts", "edgetts")
 class EdgeTTS(BaseTTS):
-    def txt_to_audio(self,msg:tuple[str, dict]):
-        text,textevent = msg
-        voice = self.opt.REF_FILE or "zh-CN-YunxiaNeural" 
-        voicename = textevent.get('tts', {}).get('ref_file',voice) #self.opt.REF_FILE #"zh-CN-YunxiaNeural"
-        t = time.time()
-        asyncio.new_event_loop().run_until_complete(self.__main(voicename,text))
-        logger.info(f'-------edge tts time:{time.time()-t:.4f}s')
-        if self.input_stream.getbuffer().nbytes<=0: #edgetts err
-            logger.error('edgetts err!!!!!')
+    def _active(self, event):
+        return (self.state == State.RUNNING and
+                ("live_run_id" not in event or event["live_run_id"] == getattr(self.parent, "live_run_id", None)))
+
+    def txt_to_audio(self, msg: tuple[str, dict]):
+        text, event = msg
+        voice = event.get("tts", {}).get("ref_file") or self.opt.REF_FILE or "zh-CN-YunxiaNeural"
+        started = time.monotonic()
+        audio = asyncio.run(self._synthesize(text, voice, event))
+        logger.info("-------edge tts time:%.4fs", time.monotonic() - started)
+        if not audio or not self._active(event):
             return
-        
-        self.input_stream.seek(0)
-        stream = self.__create_bytes_stream(self.input_stream)
-        streamlen = stream.shape[0]
-        idx=0
-        while streamlen >= self.chunk and self.state==State.RUNNING:
-            eventpoint={}
-            streamlen -= self.chunk
-            if idx==0:
-                eventpoint={'status':'start','text':text}
-            elif streamlen<self.chunk:
-                eventpoint={'status':'end','text':text}
-            eventpoint.update(**textevent) #eventpoint={'status':'end','text':text,'msgevent':textevent}
-            self.parent.put_audio_frame(stream[idx:idx+self.chunk],eventpoint)
-            idx += self.chunk
-        #if streamlen>0:  #skip last frame(not 20ms)
-        #    self.queue.put(stream[idx:])
-        self.input_stream.seek(0)
-        self.input_stream.truncate() 
+        samples, sample_rate = sf.read(BytesIO(audio), dtype="float32")
+        if samples.ndim > 1:
+            samples = samples[:, 0]
+        if sample_rate != self.sample_rate:
+            samples = resampy.resample(samples, sr_orig=sample_rate, sr_new=self.sample_rate)
+        if not len(samples):
+            raise RuntimeError("EdgeTTS returned empty audio")
+        # Preserve the tail and both playback events for very short utterances.
+        frames = max(2, (len(samples) + self.chunk - 1) // self.chunk)
+        samples = np.pad(samples, (0, frames * self.chunk - len(samples)))
+        for index in range(frames):
+            if not self._active(event):
+                break
+            metadata = dict(event)
+            if index == 0:
+                metadata.update(status="start", text=text)
+            if index == frames - 1:
+                metadata.update(status="end", text=text)
+            self.parent.put_audio_frame(samples[index * self.chunk:(index + 1) * self.chunk], metadata)
 
-    def __create_bytes_stream(self,byte_stream):
-        #byte_stream=BytesIO(buffer)
-        stream, sample_rate = sf.read(byte_stream) # [T*sample_rate,] float64
-        logger.info(f'[INFO]tts audio stream {sample_rate}: {stream.shape}')
-        stream = stream.astype(np.float32)
-
-        if stream.ndim > 1:
-            logger.info(f'[WARN] audio has {stream.shape[1]} channels, only use the first.')
-            stream = stream[:, 0]
-    
-        if sample_rate != self.sample_rate and stream.shape[0]>0:
-            logger.info(f'[WARN] audio sample rate is {sample_rate}, resampling into {self.sample_rate}.')
-            stream = resampy.resample(x=stream, sr_orig=sample_rate, sr_new=self.sample_rate)
-
-        return stream
-    
-    async def __main(self,voicename: str, text: str):
-        try:
-            communicate = edge_tts.Communicate(text, voicename)
-
-            #with open(OUTPUT_FILE, "wb") as file:
-            first = True
-            async for chunk in communicate.stream():
-                if first:
-                    first = False
-                if chunk["type"] == "audio" and self.state==State.RUNNING:
-                    #self.push_audio(chunk["data"])
-                    self.input_stream.write(chunk["data"])
-                    #file.write(chunk["data"])
-                elif chunk["type"] == "WordBoundary":
-                    pass
-        except Exception as e:
-            logger.exception('edgetts')
+    async def _synthesize(self, text, voice, event):
+        for attempt in range(3):
+            if not self._active(event):
+                return None
+            audio = bytearray()
+            try:
+                communicate = edge_tts.Communicate(text, voice, connect_timeout=10, receive_timeout=15)
+                async for chunk in communicate.stream():
+                    if not self._active(event):
+                        return None
+                    if chunk["type"] == "audio":
+                        audio.extend(chunk["data"])
+                if not audio:
+                    raise edge_tts.exceptions.NoAudioReceived("Empty audio")
+                return bytes(audio)
+            except (edge_tts.exceptions.NoAudioReceived, aiohttp.ClientError, asyncio.TimeoutError):
+                if not self._active(event):
+                    return None
+                if attempt == 2:
+                    raise
+                logger.warning("EdgeTTS request failed; retry %d/2 (voice=%s)", attempt + 1, voice)
+                await asyncio.sleep(0.4 * (attempt + 1))

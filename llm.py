@@ -44,6 +44,9 @@ def _llm_model(opt) -> str:
 
 def llm_response(message,avatar_session:'BaseAvatar',datainfo:dict={}):
     try:
+        if getattr(avatar_session, 'live_run_id', None):
+            return
+        epoch = getattr(avatar_session, 'chat_epoch', 0)
         opt = avatar_session.opt
         start = time.perf_counter()
         client = _llm_client(opt)
@@ -61,6 +64,9 @@ def llm_response(message,avatar_session:'BaseAvatar',datainfo:dict={}):
         result=""
         first = True
         for chunk in completion:
+            if getattr(avatar_session, 'live_run_id', None) or getattr(avatar_session, 'chat_epoch', 0) != epoch:
+                completion.close()
+                return
             if len(chunk.choices)>0:
                 #print(chunk.choices[0].delta.content)
                 if first:
@@ -83,7 +89,7 @@ def llm_response(message,avatar_session:'BaseAvatar',datainfo:dict={}):
                 result = result+msg[lastpos:]
         end = time.perf_counter()
         logger.info(f"llm Time to last chunk: {end-start}s")
-        if result:
+        if result and getattr(avatar_session, 'chat_epoch', 0) == epoch:
             avatar_session.put_msg_txt(result,datainfo)
 
     except Exception as e:
